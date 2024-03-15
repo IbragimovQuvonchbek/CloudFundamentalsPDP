@@ -34,8 +34,8 @@ async def start(message: types.Message) -> None:
 @dp.message(Command('tasks'))
 async def text(message: types.Message) -> None:
     with Session(engine) as session:
-        total_count = session.query(func.count(Task.id)).scalar()
-        data = session.scalars(select(Task).limit(10).offset(10)).all()
+        total_count = session.scalar(select(func.count(Task.id)))
+        data = session.scalars(select(Task).limit(10).order_by(Task.id)).all()
         count = 0
         print(total_count)
         builder = InlineKeyboardBuilder()
@@ -50,15 +50,15 @@ async def text(message: types.Message) -> None:
 
             if total_count > 10:
                 builder.button(text='>>',
-                               callback_data=f'forward_0_{message.text.lower()}')
+                               callback_data=f'forward_0')
             elif total_count > 20:
                 builder.button(text='<<',
-                               callback_data=f'back_0_{message.text.lower()}')
+                               callback_data=f'back_0')
                 builder.button(text='>>',
-                               callback_data=f'forward_0_{message.text.lower()}')
+                               callback_data=f'forward_0')
             elif total_count < 20:
                 builder.button(text='<<',
-                               callback_data=f'back_0_{message.text.lower()}')
+                               callback_data=f'back_0')
             builder.adjust(5, repeat=True)
             await message.answer(caption, reply_markup=builder.as_markup())
 
@@ -68,7 +68,7 @@ async def forward(callback: types.CallbackQuery) -> None:
     data_arr = callback.data.split('_')
     fw = int(data_arr[-1]) + 10
     with Session(engine) as session:
-        total_count = session.scalar(select(func.count(Task.id)))
+        total_count = session.query(func.count(Task.id)).order_by(Task.id).scalar()
         data = session.scalars(select(Task).limit(10).offset(fw)).all()
         builder = InlineKeyboardBuilder()
         caption = ""
