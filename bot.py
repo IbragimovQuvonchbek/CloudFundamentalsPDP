@@ -6,14 +6,13 @@ from aiogram import Bot, Dispatcher, F
 from aiogram import types
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.state import StatesGroup, State
-from aiogram.fsm.storage.memory import MemoryStorage
+# from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ContentType
 from db_connection import engine, Task, Student
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
-from aiogram.utils.markdown import hbold
 from redis.asyncio import Redis
 import asyncio
 import logging
@@ -26,20 +25,24 @@ r = Redis(host='localhost', port=6379)
 dp = Dispatcher(storage=RedisStorage(redis=r))
 
 
+# dp = Dispatcher(storage=MemoryStorage())
+
+
 class Registration(StatesGroup):
-    full_name = State()
-    group_id = State()
+    first_name = State()
+    last_name = State()
+    group_number = State()
 
 
 @dp.message(CommandStart())
 async def start(message: types.Message) -> None:
     current_user_id = str(message.from_user.id)
     with Session(engine) as session:
-        data = session.scalar(select(Student).where(Student.tg_id == current_user_id))
+        data = session.scalar(select(Student).where(Student.telegram_id == current_user_id))
         if data is None:
             await message.answer("You don't have account\nTo register a new account send /register")
         else:
-            if data.active:
+            if data.status:
                 await message.answer(f"To solve task send /tasks")
             else:
                 await message.answer(f"You have already registered. Wait admins to active your account")
@@ -49,35 +52,44 @@ async def start(message: types.Message) -> None:
 async def register(message: types.Message, state: FSMContext) -> None:
     current_user_id = str(message.from_user.id)
     with Session(engine) as session:
-        data = session.scalar(select(Student).where(Student.tg_id == current_user_id))
+        data = session.scalar(select(Student).where(Student.telegram_id == current_user_id))
         if data is None:
-            await message.answer("Send your full name")
-            await state.set_state(Registration.full_name)
+            await message.answer("Send your first name")
+            await state.set_state(Registration.first_name)
         else:
             await message.answer("You have already registered\nTo check your status send /status")
 
 
-@dp.message(F.content_type == ContentType.TEXT, Registration.full_name)
+@dp.message(F.content_type == ContentType.TEXT, Registration.first_name)
 async def register(message: types.Message, state: FSMContext) -> None:
-    await state.update_data(full_name=message.text)
+    await state.update_data(first_name=message.text)
+    await message.answer("Send your last name")
+    await state.set_state(Registration.last_name)
+
+
+@dp.message(F.content_type == ContentType.TEXT, Registration.last_name)
+async def register(message: types.Message, state: FSMContext) -> None:
+    await state.update_data(last_name=message.text)
     await message.answer("Send your group id")
-    await state.set_state(Registration.group_id)
+    await state.set_state(Registration.group_number)
 
 
-@dp.message(F.content_type == ContentType.TEXT, Registration.group_id)
+@dp.message(F.content_type == ContentType.TEXT, Registration.group_number)
 async def register(message: types.Message, state: FSMContext) -> None:
-    group_id = message.text
-    if len(group_id) != 6:
+    group_number = message.text
+    if len(group_number) != 6:
         await message.answer("Incorrect group id\nSend your group id")
         return
-    await state.update_data(group_id=group_id)
+    await state.update_data(group_number=group_number)
     data = await state.get_data()
-    full_name = data['full_name']
-    group_id = data['group_id']
-    tg_id = str(message.from_user.id)
+    first_name = str(data['first_name'])
+    last_name = str(data['last_name'])
+    group_number = str(data['group_number'])
+    telegram_id = str(message.from_user.id)
     await state.clear()
     with Session(engine) as session:
-        session.add(Student(tg_id=tg_id, full_name=full_name, group_id=group_id))
+        session.add(
+            Student(telegram_id=telegram_id, first_name=first_name, last_name=last_name, group_number=group_number))
         session.commit()
     await message.answer("Registered successfully\nTo check your status send /status")
 

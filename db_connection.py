@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import create_engine, String, Integer, DateTime, Boolean
+from sqlalchemy import create_engine, String, Integer, DateTime, Boolean, SmallInteger
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import mapped_column
 
@@ -18,11 +18,12 @@ class Task(Base):
 class Student(Base):
     __tablename__ = 'student'
     id = mapped_column(Integer, primary_key=True, autoincrement=True)
-    tg_id = mapped_column(String(20), unique=True)
-    full_name = mapped_column(String(255))
-    group_id = mapped_column(String(6))
-    port = mapped_column(String(4), default=None)
-    active = mapped_column(Boolean, default=False)
+    first_name = mapped_column(String(50))
+    last_name = mapped_column(String(50))
+    group_number = mapped_column(String(15))
+    port_number = mapped_column(SmallInteger, default=5000)
+    telegram_id = mapped_column(String(50))
+    status = mapped_column(Boolean, default=False)
     created_at = mapped_column(DateTime, default=datetime.utcnow())
 
 
