@@ -73,38 +73,44 @@ async def register(message: types.Message, state: FSMContext) -> None:
     with Session(engine) as session:
         session.add(Student(tg_id=tg_id, full_name=full_name, group_id=group_id))
         session.commit()
-    await message.answer("Registered successfully")
+    await message.answer("Registered successfully\nTo check your status send /status")
 
-    @dp.message(Command('tasks'))
-    async def text(message: types.Message) -> None:
-        with Session(engine) as session:
-            total_count = session.scalar(select(func.count(Task.id)))
-            data = session.scalars(select(Task).limit(10).order_by(Task.id)).all()
-            count = 0
-            print(total_count)
-            builder = InlineKeyboardBuilder()
-            caption = ""
-            for task in data:
-                count += 1
-                builder.button(text=f"{count}", callback_data=f"button_{task.id}")
-                caption += f"{count}. {task.name}\n"
-            if count == 0:
-                await message.answer("Sorry, I couldn't find", reply_markup=builder.as_markup())
-            else:
 
-                if total_count > 10:
-                    builder.button(text='>>',
-                                   callback_data=f'forward_0')
-                elif total_count > 20:
-                    builder.button(text='<<',
-                                   callback_data=f'back_0')
-                    builder.button(text='>>',
-                                   callback_data=f'forward_0')
-                elif total_count < 20:
-                    builder.button(text='<<',
-                                   callback_data=f'back_0')
-                builder.adjust(5, repeat=True)
-                await message.answer(caption, reply_markup=builder.as_markup())
+@dp.message(Command("status"))
+async def status(message: types) -> None:
+    await start(message)
+
+
+@dp.message(Command('tasks'))
+async def text(message: types.Message) -> None:
+    with Session(engine) as session:
+        total_count = session.scalar(select(func.count(Task.id)))
+        data = session.scalars(select(Task).limit(10).order_by(Task.id)).all()
+        count = 0
+        print(total_count)
+        builder = InlineKeyboardBuilder()
+        caption = ""
+        for task in data:
+            count += 1
+            builder.button(text=f"{count}", callback_data=f"button_{task.id}")
+            caption += f"{count}. {task.name}\n"
+        if count == 0:
+            await message.answer("Sorry, I couldn't find", reply_markup=builder.as_markup())
+        else:
+
+            if total_count > 10:
+                builder.button(text='>>',
+                               callback_data=f'forward_0')
+            elif total_count > 20:
+                builder.button(text='<<',
+                               callback_data=f'back_0')
+                builder.button(text='>>',
+                               callback_data=f'forward_0')
+            elif total_count < 20:
+                builder.button(text='<<',
+                               callback_data=f'back_0')
+            builder.adjust(5, repeat=True)
+            await message.answer(caption, reply_markup=builder.as_markup())
 
 
 @dp.callback_query(F.data.startswith('forward_'))
