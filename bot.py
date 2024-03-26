@@ -5,11 +5,11 @@ from os import environ
 from aiogram import Bot, Dispatcher, F
 from aiogram import types
 from aiogram.filters import CommandStart, Command
-# from aiogram.fsm.state import StatesGroup, State
-# from aiogram.fsm.storage.memory import MemoryStorage
-# from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.context import FSMContext
 from aiogram.types import ContentType
-from db_connection import engine, Task
+from db_connection import engine, Task, Student
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
@@ -26,41 +26,85 @@ r = Redis(host='localhost', port=6379)
 dp = Dispatcher(storage=RedisStorage(redis=r))
 
 
+class Registration(StatesGroup):
+    full_name = State()
+    group_id = State()
+
+
 @dp.message(CommandStart())
 async def start(message: types.Message) -> None:
-    await message.answer(f"Hello {hbold(message.from_user.full_name)}\nTo solve task send /tasks")
-
-
-@dp.message(Command('tasks'))
-async def text(message: types.Message) -> None:
+    current_user_id = str(message.from_user.id)
     with Session(engine) as session:
-        total_count = session.scalar(select(func.count(Task.id)))
-        data = session.scalars(select(Task).limit(10).order_by(Task.id)).all()
-        count = 0
-        print(total_count)
-        builder = InlineKeyboardBuilder()
-        caption = ""
-        for task in data:
-            count += 1
-            builder.button(text=f"{count}", callback_data=f"button_{task.id}")
-            caption += f"{count}. {task.name}\n"
-        if count == 0:
-            await message.answer("Sorry, I couldn't find", reply_markup=builder.as_markup())
+        data = session.scalar(select(Student).where(Student.tg_id == current_user_id))
+        if data is None:
+            await message.answer("You don't have account\nTo register a new account send /register")
         else:
+            if data.active:
+                await message.answer(f"Hello {hbold(message.from_user.full_name)}\nTo solve task send /tasks")
+            else:
+                await message.answer(f"You have already registered. Wait admins to active your account")
 
-            if total_count > 10:
-                builder.button(text='>>',
-                               callback_data=f'forward_0')
-            elif total_count > 20:
-                builder.button(text='<<',
-                               callback_data=f'back_0')
-                builder.button(text='>>',
-                               callback_data=f'forward_0')
-            elif total_count < 20:
-                builder.button(text='<<',
-                               callback_data=f'back_0')
-            builder.adjust(5, repeat=True)
-            await message.answer(caption, reply_markup=builder.as_markup())
+
+@dp.message(Command('register'))
+async def register(message: types.Message, state: FSMContext) -> None:
+    await message.answer("Send your full name")
+    await state.set_state(Registration.full_name)
+
+
+@dp.message(F.content_type == ContentType.TEXT, Registration.full_name)
+async def register(message: types.Message, state: FSMContext) -> None:
+    await state.update_data(full_name=message.text)
+    await message.answer("Send your group id")
+    await state.set_state(Registration.group_id)
+
+
+@dp.message(F.content_type == ContentType.TEXT, Registration.group_id)
+async def register(message: types.Message, state: FSMContext) -> None:
+    group_id = message.text
+    if len(group_id) != 6:
+        await message.answer("Incorrect group id\nSend your group id")
+        return
+    await state.update_data(group_id=group_id)
+    data = await state.get_data()
+    full_name = data['full_name']
+    group_id = data['group_id']
+    tg_id = str(message.from_user.id)
+    await state.clear()
+    with Session(engine) as session:
+        session.add(Student(tg_id=tg_id, full_name=full_name, group_id=group_id))
+        session.commit()
+    await message.answer("Registered successfully")
+
+    @dp.message(Command('tasks'))
+    async def text(message: types.Message) -> None:
+        with Session(engine) as session:
+            total_count = session.scalar(select(func.count(Task.id)))
+            data = session.scalars(select(Task).limit(10).order_by(Task.id)).all()
+            count = 0
+            print(total_count)
+            builder = InlineKeyboardBuilder()
+            caption = ""
+            for task in data:
+                count += 1
+                builder.button(text=f"{count}", callback_data=f"button_{task.id}")
+                caption += f"{count}. {task.name}\n"
+            if count == 0:
+                await message.answer("Sorry, I couldn't find", reply_markup=builder.as_markup())
+            else:
+
+                if total_count > 10:
+                    builder.button(text='>>',
+                                   callback_data=f'forward_0')
+                elif total_count > 20:
+                    builder.button(text='<<',
+                                   callback_data=f'back_0')
+                    builder.button(text='>>',
+                                   callback_data=f'forward_0')
+                elif total_count < 20:
+                    builder.button(text='<<',
+                                   callback_data=f'back_0')
+                builder.adjust(5, repeat=True)
+                await message.answer(caption, reply_markup=builder.as_markup())
 
 
 @dp.callback_query(F.data.startswith('forward_'))
