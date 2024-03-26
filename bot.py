@@ -40,15 +40,21 @@ async def start(message: types.Message) -> None:
             await message.answer("You don't have account\nTo register a new account send /register")
         else:
             if data.active:
-                await message.answer(f"Hello {hbold(message.from_user.full_name)}\nTo solve task send /tasks")
+                await message.answer(f"To solve task send /tasks")
             else:
                 await message.answer(f"You have already registered. Wait admins to active your account")
 
 
 @dp.message(Command('register'))
 async def register(message: types.Message, state: FSMContext) -> None:
-    await message.answer("Send your full name")
-    await state.set_state(Registration.full_name)
+    current_user_id = str(message.from_user.id)
+    with Session(engine) as session:
+        data = session.scalar(select(Student).where(Student.tg_id == current_user_id))
+        if data is None:
+            await message.answer("Send your full name")
+            await state.set_state(Registration.full_name)
+        else:
+            await message.answer("You have already registered\nTo check your status send /status")
 
 
 @dp.message(F.content_type == ContentType.TEXT, Registration.full_name)
